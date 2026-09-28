@@ -11,7 +11,7 @@ WORKDIR /app
 COPY requirements-serve.txt .
 RUN pip install --no-cache-dir -r requirements-serve.txt
 
-RUN useradd --create-home appuser
+RUN useradd --create-home appuser && chown appuser:appuser /app
 COPY --chown=appuser:appuser . .
 USER appuser
 
