@@ -38,6 +38,17 @@ split that overlapped the training data and contained duplicate images. The numb
 from a leakage-free split. The test set is small (42 images), so treat them as indicative;
 see the [model card](MODEL_CARD.md) for details and limitations.
 
+## What changed in version 2
+
+| Problem in v1 | Fix in v2 |
+|---|---|
+| The API skipped the `/255` pixel scaling used in training, so every scan came back "Normal" | Shared preprocessing in `prediction.py`, plus a test that fails if bundled samples are misclassified |
+| 93 of 148 "normal" images were exact copies, and evaluation re-used training images, giving a false 100% | New data-preparation stage: remove duplicates, split by scan ID into train / val / test |
+| Heavy Flatten head with SGD trained unstably | Global average pooling, dropout, Adam, class weights, early stopping |
+| Model reloaded from disk on every request; `/train` endpoint let anyone start training | Model loaded once at startup; training runs only through `dvc repro` |
+| MLflow password in the README, MLflow logging switched off | Credentials from environment variables; every evaluation logged to MLflow |
+| CI steps only echoed text; deployment ran on every push | Real lint, tests and Docker smoke test; deployment is a manual trigger |
+
 ## Architecture
 
 ```mermaid
