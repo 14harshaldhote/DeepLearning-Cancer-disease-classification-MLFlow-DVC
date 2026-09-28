@@ -120,7 +120,7 @@ async function loadSamples() {
   $("#samples").innerHTML = samples.map((s, i) => `
     <button type="button" class="sample" data-i="${i}">
       <img src="${s.url}" alt="${escapeHtml(s.true_class)} sample" loading="lazy">
-      <span>${escapeHtml(s.true_class === "normal" ? "Normal" : "Adenocarcinoma")} · #${s.name.split("_").pop()}</span>
+      <span>${s.true_class === "normal" ? "Normal" : "Cancer"} · #${s.name.split("_").pop()}</span>
     </button>`).join("");
   document.querySelectorAll(".sample").forEach((btn) => btn.addEventListener("click", async () => {
     const s = samples[btn.dataset.i];
@@ -158,7 +158,7 @@ async function loadModelInfo() {
 }
 
 function renderConfusion(ev) {
-  const names = ev.class_names.map((n) => (n === "normal" ? "Normal" : "Adenocarcinoma"));
+  const names = ev.class_names.map((n) => (n === "normal" ? "Normal" : "Cancer"));
   const cm = ev.confusion_matrix;
   const max = Math.max(...cm.flat(), 1);
   const colour = (v) => {
@@ -171,7 +171,7 @@ function renderConfusion(ev) {
   let html = `<div></div>${names.map((n) => `<div class="hdr">${n}</div>`).join("")}`;
   cm.forEach((row, i) => {
     const total = row.reduce((a, b) => a + b, 0) || 1;
-    html += `<div class="rowhdr">Actual ${names[i]}</div>`;
+    html += `<div class="rowhdr">Actual<br>${names[i]}</div>`;
     row.forEach((v, j) => {
       const [bg, fg] = colour(v);
       html += `<div class="cell" style="background:${bg};color:${fg}" data-tip="Actual ${names[i]} → predicted ${names[j]}: ${v} images (${pct(v / total)} of row)">${v}<small>${pct(v / total, 0)}</small></div>`;
@@ -191,7 +191,7 @@ function lineChart(el, history, trainKey, valKey, fmt, fixedDomain) {
   const val = history[valKey] || [];
   const n = Math.max(train.length, val.length);
   if (!n) return;
-  const W = 360, H = 200, m = { t: 10, r: 44, b: 26, l: 40 };
+  const W = 360, H = 208, m = { t: 20, r: 44, b: 26, l: 40 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
   const all = [...train, ...val];
   let [lo, hi] = fixedDomain || [Math.min(...all), Math.max(...all)];
@@ -216,7 +216,7 @@ function lineChart(el, history, trainKey, valKey, fmt, fixedDomain) {
       ${ticks.map((t) => `<line class="gridline" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/><text x="${m.l - 6}" y="${y(t) + 4}" text-anchor="end">${fmt(t)}</text>`).join("")}
       <line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih}" y2="${m.t + ih}"/>
       ${xticks.map((i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${i + 1}</text>`).join("")}
-      ${best != null && best < n ? `<line class="best" x1="${x(best)}" x2="${x(best)}" y1="${m.t}" y2="${m.t + ih}"/><text x="${x(best) + 4}" y="${m.t + 10}">best epoch ${best + 1}</text>` : ""}
+      ${best != null && best < n ? `<line class="best" x1="${x(best)}" x2="${x(best)}" y1="${m.t}" y2="${m.t + ih}"/><text x="${x(best) + (best > n * 0.6 ? -4 : 4)}" y="${m.t - 7}" text-anchor="${best > n * 0.6 ? "end" : "start"}">best epoch ${best + 1}</text>` : ""}
       <path d="${path(train)}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>
       <path d="${path(val)}" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-linejoin="round"/>
       <text class="series-label" x="${x(n - 1) + 6}" y="${labelY(train, val)}">Train</text>

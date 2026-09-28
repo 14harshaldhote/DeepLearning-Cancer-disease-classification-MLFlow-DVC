@@ -25,7 +25,9 @@ Public chest CT slice dataset (bundled as `research/Chest-CT-Scan-data.zip`, 343
 
 | Class | Raw files | Exact duplicates removed | Unique images | Scan IDs | Train | Val | Test |
 |---|---|---|---|---|---|---|---|
-{{DATA_ROWS}}
+| Adenocarcinoma | 195 | 1 | 194 | 107 | 133 | 30 | 31 |
+| Normal | 148 | 93 | 55 | 21 | 33 | 11 | 11 |
+| **Total** | 343 | 94 | 249 | 128 | 166 | 41 | 42 |
 
 Two problems in the raw data would have inflated any score measured on a random split:
 
@@ -44,28 +46,30 @@ number was not a real held-out result.
 - Augmentation: rotation, shifts, shear, zoom, horizontal flip.
 - Class weights inversely proportional to class frequency (normal is the minority class
   after de-duplication).
-- Adam, learning rate {{LR}}, batch size {{BATCH}}, up to {{EPOCHS}} epochs with early
-  stopping on validation loss (patience {{PATIENCE}}); best weights restored.
-- Seed {{SEED}} for the split and for training.
+- Adam, learning rate 0.001, batch size 16, up to 100 epochs with early
+  stopping on validation loss (patience 10); best weights restored.
+- Seed 42 for the split and for training.
+- In the recorded run early stopping did not trigger: validation loss was still improving slowly,
+  and the best weights came from epoch 97 of 100 (see `reports/training_history.json`).
 
-## Evaluation (held-out test set, {{N_TEST}} images)
+## Evaluation (held-out test set, 42 images)
 
 | Metric | Value |
 |---|---|
-| Accuracy | {{ACCURACY}} |
-| Sensitivity (cancer recall) | {{SENSITIVITY}} |
-| Specificity (normal recall) | {{SPECIFICITY}} |
-| ROC-AUC | {{AUC}} |
-| Macro F1 | {{F1}} |
+| Accuracy | 97.6% |
+| Sensitivity (cancer recall) | 96.8% |
+| Specificity (normal recall) | 100.0% |
+| ROC-AUC | 1.000 |
+| Macro F1 | 97.0% |
 
-Confusion matrix (rows = actual, columns = predicted): {{CM}}
+Confusion matrix (rows = actual, columns = predicted): adenocarcinoma → [30 correct, 1 called normal]; normal → [0 called adenocarcinoma, 11 correct]
 
 The test set is small, so each misclassified image moves accuracy by about
-{{STEP}} percentage points. Treat these numbers as indicative, not as a performance guarantee.
+2.4 percentage points. Treat these numbers as indicative, not as a performance guarantee.
 
 ## Human oversight
 
-- Predictions with confidence below {{THRESHOLD}} are flagged **Needs expert review** in the
+- Predictions with confidence below 80% are flagged **Needs expert review** in the
   API and the dashboard.
 - Every prediction returns a Grad-CAM heatmap so a reviewer can see which regions drove it.
 - The API keeps an in-memory audit trail of recent predictions (time, label, confidence,

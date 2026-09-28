@@ -117,8 +117,9 @@ class Evaluation:
         return passed
 
     def log_into_mlflow(self):
-        if self.config.mlflow_uri:
-            mlflow.set_tracking_uri(self.config.mlflow_uri)
+        # A remote server (e.g. DagsHub) when configured, otherwise a local SQLite store
+        # (browse it with `mlflow ui --backend-store-uri sqlite:///mlflow.db`).
+        mlflow.set_tracking_uri(self.config.mlflow_uri or "sqlite:///mlflow.db")
         mlflow.set_experiment(self.config.experiment_name)
 
         with mlflow.start_run():

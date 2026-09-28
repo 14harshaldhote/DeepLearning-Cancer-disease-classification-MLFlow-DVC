@@ -166,3 +166,5 @@ artifacts/*
 logs/
 mlruns/
 .DS_Store
+mlflow.db
+mlartifacts/

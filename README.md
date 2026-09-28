@@ -29,11 +29,14 @@ with Grad-CAM explanations, a web dashboard, an MCP tool for AI agents, tests, C
 
 ## Results on the held-out test set
 
-{{RESULTS_TABLE}}
+| Test images | Accuracy | Sensitivity (cancer) | Specificity (normal) | ROC-AUC | Macro F1 |
+|---|---|---|---|---|---|
+| 42 | 97.6% | 96.8% | 100.0% | 1.000 | 97.0% |
 
 The earlier version of this repo reported 100% accuracy. That figure came from a validation
 split that overlapped the training data and contained duplicate images. The numbers above are
-from a leakage-free split; see the [model card](MODEL_CARD.md) for details.
+from a leakage-free split. The test set is small (42 images), so treat them as indicative;
+see the [model card](MODEL_CARD.md) for details and limitations.
 
 ## Architecture
 
@@ -73,13 +76,13 @@ Open http://localhost:8080 for the dashboard and http://localhost:8080/docs for 
 ```bash
 dvc repro          # runs only the stages whose code, data or params changed
 dvc metrics show   # test metrics from scores.json and reports/
-mlflow ui          # browse runs logged to ./mlruns
+mlflow ui --backend-store-uri sqlite:///mlflow.db   # browse logged runs
 ```
 
 Hyperparameters live in [params.yaml](params.yaml) and paths in [config/config.yaml](config/config.yaml).
 `python main.py` runs the same five stages without DVC.
 
-To log runs to DagsHub or another MLflow server instead of `./mlruns`, set these environment
+To log runs to DagsHub or another MLflow server instead of the local `mlflow.db`, set these environment
 variables (never commit the token):
 
 ```bash
