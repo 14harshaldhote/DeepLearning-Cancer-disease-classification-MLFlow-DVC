@@ -1,22 +1,24 @@
 from cnnClassifier import logger
-from cnnClassifier.components.data_ingestion import DataIngestion
+from cnnClassifier.components.model_evaluation import Evaluation
 from cnnClassifier.config.configuration import ConfigurationManager
 
-STAGE_NAME = "Data Ingestion"
+STAGE_NAME = "Evaluation"
 
 
-class DataIngestionTrainingPipeline:
+class EvaluationPipeline:
     def main(self):
         config = ConfigurationManager()
-        data_ingestion = DataIngestion(config=config.get_data_ingestion_config())
-        data_ingestion.download_file()
-        data_ingestion.extract_zip_file()
+        evaluation = Evaluation(config.get_evaluation_config())
+        evaluation.evaluation()
+        evaluation.save_score()
+        evaluation.promote_model()
+        evaluation.log_into_mlflow()
 
 
 if __name__ == "__main__":
     try:
         logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
-        DataIngestionTrainingPipeline().main()
+        EvaluationPipeline().main()
         logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
     except Exception as e:
         logger.exception(e)

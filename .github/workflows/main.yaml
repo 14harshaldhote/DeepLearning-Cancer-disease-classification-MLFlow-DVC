@@ -1,44 +1,72 @@
-name: workflow
+name: CI/CD
 
 on:
   push:
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
+    branches: [main]
+    paths-ignore: ["**.md"]
+  pull_request:
+  # Deployment to AWS runs only when started by hand (Actions tab -> Run workflow),
+  # so pushes don't fail when the EC2 runner or AWS secrets are not set up.
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Build, push to ECR and deploy to the self-hosted EC2 runner"
+        type: boolean
+        default: false
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
-  integration:
-    name: Continuous Integration
+  test:
+    name: Lint and test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Lint code
-        run: echo "Linting repository"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Run unit tests
-        run: echo "Running unit tests"
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit and API tests
+        run: pytest -q
+
+  docker:
+    name: Build Docker image
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and smoke-test the image
+        run: |
+          docker build -t chest-ct-classifier .
+          docker run -d --name app -p 8080:8080 chest-ct-classifier
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/health && exit 0
+            sleep 3
+          done
+          docker logs app
+          exit 1
 
   build-and-push-ecr-image:
     name: Continuous Delivery
-    needs: integration
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    needs: docker
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Install Utilities
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq unzip
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -46,53 +74,40 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build, tag, and push image to Amazon ECR
-        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: latest
         run: |
-          # Build a docker container and
-          # push it to ECR so that it can
-          # be deployed to ECS.
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          
-          
-  Continuous-Deployment:
+
+  continuous-deployment:
+    name: Continuous Deployment
     needs: build-and-push-ecr-image
     runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-      
-      
-      - name: Pull latest images
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Pull latest image
+        run: docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+
+      - name: Replace running container
         run: |
-         docker pull ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
-         
-      # - name: Stop and remove container if running
-      #   run: |
-      #    docker ps -q --filter "name=cnncls" | grep -q . && docker stop cnncls && docker rm -fv cnncls
-       
-      - name: Run Docker Image to serve users
-        run: |
-         docker run -d -p 8080:8080 --name=cnncls -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}'  ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
-      - name: Clean previous images and containers
-        run: |
-         docker system prune -f
+          docker rm -f cnncls 2>/dev/null || true
+          docker run -d -p 8080:8080 --restart unless-stopped --name=cnncls \
+            ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+
+      - name: Clean up old images
+        run: docker image prune -f

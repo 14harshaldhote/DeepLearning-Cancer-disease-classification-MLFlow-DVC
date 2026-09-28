@@ -1,46 +1,54 @@
 import os
-from cnnClassifier.constants import *
-from cnnClassifier.utils.common import read_yaml, create_directories, save_json
-from cnnClassifier.entity.config_entity import (DataIngestionConfig,
-                                                PrepareBaseModelConfig,
-                                                TrainingConfig,
-                                                EvaluationConfig)
+from pathlib import Path
+
+from cnnClassifier.constants import CONFIG_FILE_PATH, PARAMS_FILE_PATH
+from cnnClassifier.entity.config_entity import (
+    DataIngestionConfig,
+    DataPreparationConfig,
+    EvaluationConfig,
+    PrepareBaseModelConfig,
+    TrainingConfig,
+)
+from cnnClassifier.utils.common import create_directories, read_yaml
 
 
 class ConfigurationManager:
-    def __init__(
-        self,
-        config_filepath = CONFIG_FILE_PATH,
-        params_filepath = PARAMS_FILE_PATH):
-
-        self.config = read_yaml(config_filepath)
-        self.params = read_yaml(params_filepath)
+    def __init__(self, config_filepath=CONFIG_FILE_PATH, params_filepath=PARAMS_FILE_PATH):
+        self.config = read_yaml(Path(config_filepath))
+        self.params = read_yaml(Path(params_filepath))
 
         create_directories([self.config.artifacts_root])
 
-
-    
     def get_data_ingestion_config(self) -> DataIngestionConfig:
         config = self.config.data_ingestion
-
         create_directories([config.root_dir])
 
-        data_ingestion_config = DataIngestionConfig(
-            root_dir=config.root_dir,
+        return DataIngestionConfig(
+            root_dir=Path(config.root_dir),
             source_URL=config.source_URL,
-            local_data_file=config.local_data_file,
-            unzip_dir=config.unzip_dir 
+            local_source=Path(config.local_source),
+            local_data_file=Path(config.local_data_file),
+            unzip_dir=Path(config.unzip_dir),
         )
 
-        return data_ingestion_config
-    
+    def get_data_preparation_config(self) -> DataPreparationConfig:
+        config = self.config.data_preparation
+        create_directories([config.root_dir])
+
+        return DataPreparationConfig(
+            root_dir=Path(config.root_dir),
+            source_dir=Path(config.source_dir),
+            report_path=Path(config.report_path),
+            params_val_split=self.params.VAL_SPLIT,
+            params_test_split=self.params.TEST_SPLIT,
+            params_seed=self.params.SEED,
+        )
 
     def get_prepare_base_model_config(self) -> PrepareBaseModelConfig:
         config = self.config.prepare_base_model
-        
         create_directories([config.root_dir])
 
-        prepare_base_model_config = PrepareBaseModelConfig(
+        return PrepareBaseModelConfig(
             root_dir=Path(config.root_dir),
             base_model_path=Path(config.base_model_path),
             updated_base_model_path=Path(config.updated_base_model_path),
@@ -48,46 +56,46 @@ class ConfigurationManager:
             params_learning_rate=self.params.LEARNING_RATE,
             params_include_top=self.params.INCLUDE_TOP,
             params_weights=self.params.WEIGHTS,
-            params_classes=self.params.CLASSES
+            params_classes=self.params.CLASSES,
         )
-
-        return prepare_base_model_config
-    
-
 
     def get_training_config(self) -> TrainingConfig:
         training = self.config.training
-        prepare_base_model = self.config.prepare_base_model
-        params = self.params
-        training_data = os.path.join(self.config.data_ingestion.unzip_dir, "Chest-CT-Scan-data")
-        create_directories([
-            Path(training.root_dir)
-        ])
+        split_root = Path(self.config.data_preparation.root_dir)
+        create_directories([training.root_dir])
 
-        training_config = TrainingConfig(
+        return TrainingConfig(
             root_dir=Path(training.root_dir),
             trained_model_path=Path(training.trained_model_path),
-            updated_base_model_path=Path(prepare_base_model.updated_base_model_path),
-            training_data=Path(training_data),
-            params_epochs=params.EPOCHS,
-            params_batch_size=params.BATCH_SIZE,
-            params_is_augmentation=params.AUGMENTATION,
-            params_image_size=params.IMAGE_SIZE
+            history_path=Path(training.history_path),
+            updated_base_model_path=Path(self.config.prepare_base_model.updated_base_model_path),
+            train_dir=split_root / "train",
+            val_dir=split_root / "val",
+            params_epochs=self.params.EPOCHS,
+            params_batch_size=self.params.BATCH_SIZE,
+            params_is_augmentation=self.params.AUGMENTATION,
+            params_image_size=self.params.IMAGE_SIZE,
+            params_patience=self.params.EARLY_STOPPING_PATIENCE,
+            params_seed=self.params.SEED,
         )
-
-        return training_config
-    
-
-
 
     def get_evaluation_config(self) -> EvaluationConfig:
-        eval_config = EvaluationConfig(
-            path_of_model="artifacts/training/model.h5",
-            training_data="artifacts/data_ingestion/Chest-CT-Scan-data",
-            mlflow_uri="https://dagshub.com/14harshaldhote/DeepLearning-Cancer-disease-classification-MLFlow-DVC.mlflow",
-            all_params=self.params,
+        evaluation = self.config.evaluation
+        create_directories([evaluation.root_dir])
+
+        return EvaluationConfig(
+            root_dir=Path(evaluation.root_dir),
+            path_of_model=Path(self.config.training.trained_model_path),
+            test_dir=Path(self.config.data_preparation.root_dir) / "test",
+            report_path=Path(evaluation.report_path),
+            scores_path=Path(evaluation.scores_path),
+            serving_model_path=Path(evaluation.serving_model_path),
+            all_params=self.params.to_dict(),
+            # Credentials stay in the environment (MLFLOW_TRACKING_USERNAME /
+            # MLFLOW_TRACKING_PASSWORD). Without a URI, runs go to ./mlruns.
+            mlflow_uri=os.getenv("MLFLOW_TRACKING_URI", ""),
+            experiment_name=evaluation.experiment_name,
             params_image_size=self.params.IMAGE_SIZE,
-            params_batch_size=self.params.BATCH_SIZE
+            params_batch_size=self.params.BATCH_SIZE,
+            params_min_accuracy=self.params.PROMOTION_MIN_ACCURACY,
         )
-        return eval_config
-      

@@ -3,14 +3,34 @@ stages:
     cmd: python src/cnnClassifier/pipeline/stage_01_data_ingestion.py
     deps:
       - src/cnnClassifier/pipeline/stage_01_data_ingestion.py
+      - src/cnnClassifier/components/data_ingestion.py
+      - research/Chest-CT-Scan-data.zip
       - config/config.yaml
     outs:
       - artifacts/data_ingestion/Chest-CT-Scan-data
 
-  prepare_base_model:
-    cmd: python src/cnnClassifier/pipeline/stage_02_prepare_base_model.py
+  data_preparation:
+    cmd: python src/cnnClassifier/pipeline/stage_02_data_preparation.py
     deps:
-      - src/cnnClassifier/pipeline/stage_02_prepare_base_model.py
+      - src/cnnClassifier/pipeline/stage_02_data_preparation.py
+      - src/cnnClassifier/components/data_preparation.py
+      - artifacts/data_ingestion/Chest-CT-Scan-data
+      - config/config.yaml
+    params:
+      - VAL_SPLIT
+      - TEST_SPLIT
+      - SEED
+    outs:
+      - artifacts/data_preparation
+    metrics:
+      - reports/data_split.json:
+          cache: false
+
+  prepare_base_model:
+    cmd: python src/cnnClassifier/pipeline/stage_03_prepare_base_model.py
+    deps:
+      - src/cnnClassifier/pipeline/stage_03_prepare_base_model.py
+      - src/cnnClassifier/components/prepare_base_model.py
       - config/config.yaml
     params:
       - IMAGE_SIZE
@@ -22,31 +42,40 @@ stages:
       - artifacts/prepare_base_model
 
   training:
-    cmd: python src/cnnClassifier/pipeline/stage_03_model_trainer.py
+    cmd: python src/cnnClassifier/pipeline/stage_04_model_trainer.py
     deps:
-      - src/cnnClassifier/pipeline/stage_03_model_trainer.py
+      - src/cnnClassifier/pipeline/stage_04_model_trainer.py
+      - src/cnnClassifier/components/model_trainer.py
       - config/config.yaml
-      - artifacts/data_ingestion/Chest-CT-Scan-data
+      - artifacts/data_preparation
       - artifacts/prepare_base_model
     params:
       - IMAGE_SIZE
       - EPOCHS
       - BATCH_SIZE
       - AUGMENTATION
+      - EARLY_STOPPING_PATIENCE
+      - SEED
     outs:
       - artifacts/training/model.h5
-
+    metrics:
+      - reports/training_history.json:
+          cache: false
 
   evaluation:
-    cmd: python src/cnnClassifier/pipeline/stage_04_model_evaluation.py
+    cmd: python src/cnnClassifier/pipeline/stage_05_model_evaluation.py
     deps:
-      - src/cnnClassifier/pipeline/stage_04_model_evaluation.py
+      - src/cnnClassifier/pipeline/stage_05_model_evaluation.py
+      - src/cnnClassifier/components/model_evaluation.py
       - config/config.yaml
-      - artifacts/data_ingestion/Chest-CT-Scan-data
+      - artifacts/data_preparation
       - artifacts/training/model.h5
     params:
       - IMAGE_SIZE
       - BATCH_SIZE
+      - PROMOTION_MIN_ACCURACY
     metrics:
-    - scores.json:
-        cache: false
+      - scores.json:
+          cache: false
+      - reports/evaluation.json:
+          cache: false

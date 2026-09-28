@@ -1,0 +1,10 @@
+.git
+.github
+.dvc
+artifacts
+research
+mlruns
+logs
+tests
+**/__pycache__
+*.ipynb

@@ -1,22 +1,20 @@
 from cnnClassifier import logger
-from cnnClassifier.components.data_ingestion import DataIngestion
+from cnnClassifier.components.data_preparation import DataPreparation
 from cnnClassifier.config.configuration import ConfigurationManager
 
-STAGE_NAME = "Data Ingestion"
+STAGE_NAME = "Data Preparation"
 
 
-class DataIngestionTrainingPipeline:
+class DataPreparationPipeline:
     def main(self):
         config = ConfigurationManager()
-        data_ingestion = DataIngestion(config=config.get_data_ingestion_config())
-        data_ingestion.download_file()
-        data_ingestion.extract_zip_file()
+        DataPreparation(config=config.get_data_preparation_config()).run()
 
 
 if __name__ == "__main__":
     try:
         logger.info(f">>>>>> stage {STAGE_NAME} started <<<<<<")
-        DataIngestionTrainingPipeline().main()
+        DataPreparationPipeline().main()
         logger.info(f">>>>>> stage {STAGE_NAME} completed <<<<<<\n\nx==========x")
     except Exception as e:
         logger.exception(e)

@@ -3,10 +3,17 @@ artifacts_root: artifacts
 
 data_ingestion:
   root_dir: artifacts/data_ingestion
+  # A copy of the dataset ships with the repo; the Google Drive link is the fallback.
+  local_source: research/Chest-CT-Scan-data.zip
   source_URL: https://drive.google.com/file/d/1z0mreUtRmR-P-magILsDR3T7M6IkGXtY/view?usp=sharing
   local_data_file: artifacts/data_ingestion/data.zip
   unzip_dir: artifacts/data_ingestion
 
+
+data_preparation:
+  root_dir: artifacts/data_preparation
+  source_dir: artifacts/data_ingestion/Chest-CT-Scan-data
+  report_path: reports/data_split.json
 
 
 prepare_base_model:
@@ -18,3 +25,14 @@ prepare_base_model:
 training:
   root_dir: artifacts/training
   trained_model_path: artifacts/training/model.h5
+  history_path: reports/training_history.json
+
+
+evaluation:
+  root_dir: artifacts/evaluation
+  report_path: reports/evaluation.json
+  scores_path: scores.json
+  # The model the web app serves. Evaluation copies the trained model here
+  # only when it passes the quality gate in params.yaml.
+  serving_model_path: model/model.h5
+  experiment_name: chest-ct-classification
