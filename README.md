@@ -1,149 +1,193 @@
-# DeepLearning-Cancer-disease-classification-MLFlow-DVC
+# Chest CT Cancer Classification · MLOps with DVC, MLflow, FastAPI and Grad-CAM
 
-## Workflows
+[![CI/CD](https://github.com/14harshaldhote/DeepLearning-Cancer-disease-classification-MLFlow-DVC/actions/workflows/main.yaml/badge.svg)](https://github.com/14harshaldhote/DeepLearning-Cancer-disease-classification-MLFlow-DVC/actions/workflows/main.yaml)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-1. Update config.yaml
-2. Update secrets.yaml [Optional]
-3. Update params.yaml
-4. Update the entity
-5. Update the configuration manager in src config
-6. Update the components
-7. Update the pipeline 
-8. Update the main.py
-9. Update the dvc.yaml
+An end-to-end deep learning project that classifies chest CT slices as **adenocarcinoma** or
+**normal** with a VGG16 transfer-learning model. It covers the whole lifecycle: a reproducible
+DVC pipeline, MLflow experiment tracking, a quality gate before deployment, a FastAPI service
+with Grad-CAM explanations, a web dashboard, an MCP tool for AI agents, tests, CI/CD and Docker.
 
+> Research and portfolio project. Not a medical device. See [MODEL_CARD.md](MODEL_CARD.md).
 
+![Dashboard](docs/dashboard.png)
 
+## Highlights
 
+| Area | What's in the project |
+|---|---|
+| Data-centric ML | Removes 94 duplicate images and splits by scan ID, so no scan leaks between train, validation and test |
+| Explainable AI | Grad-CAM heatmap for every prediction, in the API and the dashboard |
+| Human in the loop | Low-confidence predictions are flagged "Needs expert review"; recent predictions are kept as an audit trail |
+| MLOps | 5-stage DVC pipeline, MLflow tracking (local or DagsHub), quality gate that only promotes a model that passes |
+| Serving | FastAPI with OpenAPI docs, model loaded once at startup, input validation, health check |
+| Agentic AI | MCP server so Claude or any MCP client can call the classifier as a tool |
+| Engineering | pytest suite, ruff lint, GitHub Actions CI with a Docker smoke test, non-root Docker image |
+| Responsible AI | Model card with data issues, limitations and a regulatory note |
 
-## MLflow
+## Results on the held-out test set
 
-- [Documentation](https://mlflow.org/docs/latest/index.html)
+| Test images | Accuracy | Sensitivity (cancer) | Specificity (normal) | ROC-AUC | Macro F1 |
+|---|---|---|---|---|---|
+| 42 | 97.6% | 96.8% | 100.0% | 1.000 | 97.0% |
 
-- [MLflow tutorial](https://youtube.com/playlist?list=PLkz_y24mlSJZrqiZ4_cLUiP0CBN5wFmTb&si=zEp_C8zLHt1DzWKK)
+The earlier version of this repo reported 100% accuracy. That figure came from a validation
+split that overlapped the training data and contained duplicate images. The numbers above are
+from a leakage-free split. The test set is small (42 images), so treat them as indicative;
+see the [model card](MODEL_CARD.md) for details and limitations.
 
-##### cmd
-- mlflow ui
+## What changed in version 2
 
-### dagshub
-[dagshub](https://dagshub.com/)
+| Problem in v1 | Fix in v2 |
+|---|---|
+| The API skipped the `/255` pixel scaling used in training, so every scan came back "Normal" | Shared preprocessing in `prediction.py`, plus a test that fails if bundled samples are misclassified |
+| 93 of 148 "normal" images were exact copies, and evaluation re-used training images, giving a false 100% | New data-preparation stage: remove duplicates, split by scan ID into train / val / test |
+| Heavy Flatten head with SGD trained unstably | Global average pooling, dropout, Adam, class weights, early stopping |
+| Model reloaded from disk on every request; `/train` endpoint let anyone start training | Model loaded once at startup; training runs only through `dvc repro` |
+| MLflow password in the README, MLflow logging switched off | Credentials from environment variables; every evaluation logged to MLflow |
+| CI steps only echoed text; deployment ran on every push | Real lint, tests and Docker smoke test; deployment is a manual trigger |
 
-MLFLOW_TRACKING_URI=https://dagshub.com/14harshaldhote/DeepLearning-Cancer-disease-classification-MLFlow-DVC.mlflow \
-MLFLOW_TRACKING_USERNAME=14harshaldhote \
-MLFLOW_TRACKING_PASSWORD=fb6ef3fb35654e7a5a7363cf0c134fdfa568f689 \
-python script.py
+## Architecture
 
-Run this to export as env variables:
-
-```bash
-
-
-
-export MLFLOW_TRACKING_URI=https://dagshub.com/14harshaldhote/DeepLearning-Cancer-disease-classification-MLFlow-DVC.mlflow
-
-export MLFLOW_TRACKING_USERNAME=14harshaldhote
-
-export MLFLOW_TRACKING_PASSWORD=fb6ef3fb35654e7a5a7363cf0c134fdfa568f689
-
+```mermaid
+flowchart LR
+    A[Dataset zip<br/>or Google Drive] --> B[1 Data ingestion]
+    B --> C[2 Data preparation<br/>dedupe + split by scan]
+    C --> E[4 Training<br/>augmentation, class weights,<br/>early stopping]
+    D[3 Base model<br/>VGG16 ImageNet] --> E
+    E --> F[5 Evaluation<br/>test metrics]
+    F --> G[(MLflow)]
+    F -->|quality gate passed| H[model/model.h5]
+    H --> I[FastAPI + Grad-CAM]
+    I --> J[Web dashboard]
+    I --> K[REST clients]
+    H --> L[MCP server] --> M[AI agents]
 ```
 
+## Quick start
 
+Requires Python 3.10 or 3.11.
 
-### DVC cmd
+```bash
+git clone https://github.com/14harshaldhote/DeepLearning-Cancer-disease-classification-MLFlow-DVC.git
+cd DeepLearning-Cancer-disease-classification-MLFlow-DVC
 
-1. dvc init
-2. dvc repro
-3. dvc dag
+python -m venv .venv && source .venv/bin/activate   # or: uv venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
 
+uvicorn app:app --port 8080
+```
 
-## About MLflow & DVC
+Open http://localhost:8080 for the dashboard and http://localhost:8080/docs for the API.
 
-MLflow
+### Retrain the model
 
- - Its Production Grade
- - Trace all of your expriements
- - Logging & taging your model
+```bash
+dvc repro          # runs only the stages whose code, data or params changed
+dvc metrics show   # test metrics from scores.json and reports/
+mlflow ui --backend-store-uri sqlite:///mlflow.db   # browse logged runs
+```
 
+Hyperparameters live in [params.yaml](params.yaml) and paths in [config/config.yaml](config/config.yaml).
+`python main.py` runs the same five stages without DVC.
 
-DVC 
+To log runs to DagsHub or another MLflow server instead of the local `mlflow.db`, set these environment
+variables (never commit the token):
 
- - Its very lite weight for POC only
- - lite weight expriements tracker
- - It can perform Orchestration (Creating Pipelines)
+```bash
+export MLFLOW_TRACKING_URI=https://dagshub.com/<user>/<repo>.mlflow
+export MLFLOW_TRACKING_USERNAME=<user>
+export MLFLOW_TRACKING_PASSWORD=<token>
+```
 
+### Run with Docker
 
+```bash
+docker build -t chest-ct-classifier .
+docker run -p 8080:8080 chest-ct-classifier
+```
 
-# AWS-CICD-Deployment-with-Github-Actions
+### Tests and lint
 
-## 1. Login to AWS console.
+```bash
+pytest -q
+ruff check .
+```
 
-## 2. Create IAM user for deployment
+## API
 
-	#with specific access
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | Web dashboard |
+| GET | `/health` | Liveness and model status |
+| POST | `/api/predict` | Multipart image upload; returns label, probabilities, confidence, review flag, Grad-CAM PNG (base64) and latency |
+| GET | `/api/model-info` | Parameters, data split, training history and test metrics |
+| GET | `/api/samples` | Held-out sample images for the demo |
+| GET | `/api/history` | Recent predictions (audit trail, no images stored) |
+| POST | `/predict` | Legacy endpoint: `{"image": "<base64>"}` → `[{"image": "<label>"}]` |
 
-	1. EC2 access : It is virtual machine
+```bash
+curl -F "file=@static/samples/adenocarcinoma_1.png" "http://localhost:8080/api/predict?explain=false"
+```
 
-	2. ECR: Elastic Container registry to save your docker image in aws
+## Use it from an AI agent (MCP)
 
+`mcp_server.py` exposes two tools, `classify_ct_scan(image_path)` and `model_card()`, over the
+Model Context Protocol. For Claude Desktop, add this to `claude_desktop_config.json`:
 
-	#Description: About the deployment
+```json
+{
+  "mcpServers": {
+    "chest-ct": {
+      "command": "/path/to/.venv/bin/python",
+      "args": ["/path/to/repo/mcp_server.py"]
+    }
+  }
+}
+```
 
-	1. Build docker image of the source code
+For Claude Code: `claude mcp add chest-ct -- /path/to/.venv/bin/python /path/to/repo/mcp_server.py`
 
-	2. Push your docker image to ECR
+## Deploy to AWS (EC2 + ECR)
 
-	3. Launch Your EC2 
+The `CI/CD` workflow runs lint, tests and a Docker smoke test on every push and pull request.
+Deployment runs only when started by hand (Actions → CI/CD → Run workflow → tick *deploy*):
 
-	4. Pull Your image from ECR in EC2
+1. Create an IAM user with `AmazonEC2ContainerRegistryFullAccess` and `AmazonEC2FullAccess`.
+2. Create an ECR repository and an Ubuntu EC2 instance, and install Docker on it
+   (`curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker ubuntu`).
+3. Register the EC2 instance as a self-hosted runner (Settings → Actions → Runners).
+4. Add repository secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`,
+   `AWS_ECR_LOGIN_URI`, `ECR_REPOSITORY_NAME`.
 
-	5. Lauch your docker image in EC2
+## Project structure
 
-	#Policy:
+```
+├── app.py                      FastAPI service and dashboard routes
+├── mcp_server.py               MCP tool server for AI agents
+├── main.py                     Runs all pipeline stages
+├── dvc.yaml / dvc.lock         Pipeline definition and locked versions
+├── params.yaml                 Hyperparameters, split ratios, thresholds
+├── config/config.yaml          Paths for every stage
+├── src/cnnClassifier/
+│   ├── components/             Ingestion, preparation, base model, training, evaluation, Grad-CAM
+│   ├── pipeline/               One script per DVC stage + prediction pipeline
+│   ├── config/ entity/         Typed configuration
+│   └── utils/
+├── model/model.h5              Served model (promoted by the evaluation stage)
+├── reports/                    Data split, training history, test report (tracked by DVC as metrics)
+├── templates/ static/          Dashboard (HTML, CSS, JS, sample images)
+├── tests/                      pytest suite
+├── research/                   Original notebooks and the dataset zip
+└── MODEL_CARD.md
+```
 
-	1. AmazonEC2ContainerRegistryFullAccess
+## Tech stack
 
-	2. AmazonEC2FullAccess
+TensorFlow/Keras · DVC · MLflow · FastAPI · Uvicorn · Grad-CAM · MCP · pytest · ruff · Docker · GitHub Actions · AWS ECR/EC2
 
-	
-## 3. Create ECR repo to store/save docker image
-    - Save the URI: 075536688445.dkr.ecr.us-east-1.amazonaws.com/cancer
+## License
 
-	
-## 4. Create EC2 machine (Ubuntu) 
-
-## 5. Open EC2 and Install docker in EC2 Machine:
-	
-	
-	#optinal
-
-	sudo apt-get update -y
-
-	sudo apt-get upgrade
-	
-	#required
-
-	curl -fsSL https://get.docker.com -o get-docker.sh
-
-	sudo sh get-docker.sh
-
-	sudo usermod -aG docker ubuntu
-
-	newgrp docker
-	
-# 6. Configure EC2 as self-hosted runner:
-    setting>actions>runner>new self hosted runner> choose os> then run command one by one
-
-
-# 7. Setup github secrets:
-
-    AWS_ACCESS_KEY_ID=
-
-    AWS_SECRET_ACCESS_KEY=
-
-    AWS_REGION = us-east-1
-
-    AWS_ECR_LOGIN_URI = demo>>  566373416292.dkr.ecr.ap-south-1.amazonaws.com
-
-    ECR_REPOSITORY_NAME = simple-app
-
-
+MIT

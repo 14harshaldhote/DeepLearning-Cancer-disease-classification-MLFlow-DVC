@@ -1,0 +1,23 @@
+{
+    "classes": {
+        "adenocarcinoma": {
+            "raw_files": 195,
+            "duplicates_removed": 1,
+            "unique_files": 194,
+            "scan_ids": 107,
+            "train": 133,
+            "val": 30,
+            "test": 31
+        },
+        "normal": {
+            "raw_files": 148,
+            "duplicates_removed": 93,
+            "unique_files": 55,
+            "scan_ids": 21,
+            "train": 33,
+            "val": 11,
+            "test": 11
+        }
+    },
+    "seed": 42
+}

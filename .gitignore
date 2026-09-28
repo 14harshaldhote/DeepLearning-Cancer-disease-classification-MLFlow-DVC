@@ -162,3 +162,9 @@ cython_debug/
 
 
 artifacts/*
+# Local run outputs
+logs/
+mlruns/
+.DS_Store
+mlflow.db
+mlartifacts/

@@ -3,6 +3,19 @@ IMAGE_SIZE: [224, 224, 3] # as per VGG 16 model
 BATCH_SIZE: 16
 INCLUDE_TOP: False
 EPOCHS: 100
+EARLY_STOPPING_PATIENCE: 10
 CLASSES: 2
 WEIGHTS: imagenet
-LEARNING_RATE: 0.01
+LEARNING_RATE: 0.001
+SEED: 42
+
+# Leakage-safe split: duplicates are removed and every scan (patient) id
+# lands in exactly one of train / val / test.
+VAL_SPLIT: 0.15
+TEST_SPLIT: 0.15
+
+# Quality gate before the trained model replaces the served one.
+PROMOTION_MIN_ACCURACY: 0.85
+
+# Predictions below this confidence are flagged for human review.
+REVIEW_THRESHOLD: 0.80
